@@ -7,7 +7,7 @@ _start:
 	push byte 'a' ; push 0x61 on the stack
 	push dword string ; push char* at 'string' symbol
 	call func 
-	add esp, 4 ; stack cleanup
+	add rsp, 16 ; stack cleanup
 	mov ebx, 0
 	mov eax, 1
 	int 0x80
