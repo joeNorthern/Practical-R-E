@@ -18,9 +18,9 @@ func:
 ;
 	mov rdi, [rbp+16] ; load pointer to 'string' into edi
 	mov rdx, rdi ; save pointer snippet into rdx
-	xor rax, rax ; null-out rax
+	xor eax, eax ; null-out rax
 	or rcx, 0xFFFFFFFFFFFFFFFF ; rcx = -1
-	repne scasb ; repeatedly increment the pointer at edi by wanted size until it's value does not match rax.
+	repne scasb ; repeatedly increment the pointer at edi by wanted size until it's value does not match eax.
 				; each run, decrement rcx.
 	            ; in this scenario, effectively counting lenght of 'string'.
 	add rcx, 2  ; compensate the starting-out -1 and the counted null terminator
@@ -32,3 +32,7 @@ func:
 	mov rsp, rbp ; move effective base pointer to stack pointer
 	pop rbp      ; jump to previously stored return address
 	ret
+
+; P.S: the original exercise was intended for 32-bit systems, but I am on a 64-bit one. The code was slightly changed
+; according to my architecture, but the mechanisms remain the same.
+; compiled in NASM 2.16.01
