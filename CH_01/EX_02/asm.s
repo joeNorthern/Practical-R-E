@@ -57,7 +57,7 @@ addme:
 
 ; It would likely cause undefined behaviour, and if the binary was compiled with frame-pointer omission it would absolutely cause a segfault.
 
-; 4.
+; 4. In all of the calling conventions explained, the return value is stored in 32-bit/64-bit register (EAX/RAX). What happens when the return value does not fit in a 32-bit/64-bit register?
 ; Let's try building a mul program to showcase mul behavior.
 
 ; pwndbg> 
