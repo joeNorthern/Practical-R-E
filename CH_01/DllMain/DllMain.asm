@@ -23,29 +23,28 @@ C2 0C 00              retn    0Ch							; return 0
 ; We should put a notice on the cmp instructions above: the conditions they are being supported with only use unsigned arguments.
 ; We will use GCC. The following attempt to reconstruct the code works on 32-bit x86 systems
 
-/*
-#include <stdint.h>
 
-typedef struct
-{
-	uint16_t limit;
-	uint32_t base;
-} __attribute__((packed)) IDT_PTR;
-
-int _DllMain(...)
-{
-	IDT_PTR idtr;
-	asm volatile
-	(
-		"sidt %0":
-		"=m" (idtr)
-	);
-	if(idtr.base <= 0x8003F400) goto loc_10001C88;
-	if(idtr.base >= 0x80047400) goto loc_10001C88;
-
-loc_10001C88:
-	...
-*/
+; #include <stdint.h>
+;
+; typedef struct
+; {
+;	uint16_t limit;
+;	uint32_t base;
+; } __attribute__((packed)) IDT_PTR; /* _attribute__((packed)) means to struct this structure without paddling whatsoever */
+;
+; int _DllMain(...)
+; {
+; 	IDT_PTR idtr;
+;	asm volatile
+;	(
+;		"sidt %0":
+;		"=m" (idtr)
+;	);
+;	if(idtr.base <= 0x8003F400) goto loc_10001C88;
+;	if(idtr.base >= 0x80047400) goto loc_10001C88;
+;
+; loc_10001C88:
+; 	...
                 loc_10001C88:
 33 C0                 xor     eax, eax
 B9 49 00 00 00        mov     ecx, 49h
