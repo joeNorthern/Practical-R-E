@@ -1,21 +1,51 @@
 ; BOOL __stdcall DllMain(HINSTANCE hinstDLL, DWORD fdwReason,
 ; LPVOID lpvReserved)
                 _DllMain@12 proc near
-55                    push    ebp
-8B EC                 mov     ebp, esp
-81 EC 30 01 00+       sub     esp, 130h
-57                    push    edi
-0F 01 4D F8           sidt    fword ptr [ebp-8]
-8B 45 FA              mov     eax, [ebp-6]
-3D 00 F4 03 80        cmp     eax, 8003F400h
-76 10                 jbe     short loc_10001C88 (line 18)
-3D 00 74 04 80        cmp     eax, 80047400h
-73 09                 jnb     short loc_10001C88 (line 18)
-33 C0                 xor     eax, eax
-5F                    pop     edi
-8B E5                 mov     esp, ebp
-5D                    pop     ebp
-C2 0C 00              retn    0Ch
+55                    push    ebp                           ; push ebp from caller down the stack
+8B EC                 mov     ebp, esp						; move esp to ebp, new stack frame
+81 EC 30 01 00+       sub     esp, 130h						; subtract 0x130 from esp, new stack frame used
+57                    push    edi							; pushing edi down the stack, what is it?
+0F 01 4D F8           sidt    fword ptr [ebp-8]				; store IDTR at ebp-8, Store Interrupt Descriptor Table. Think of the IDT as an array of function pointers to fault/interrupt handlers.
+8B 45 FA              mov     eax, [ebp-6]					; The IDT Register consists of 6-bytes. High 2-bytes are the limit, the rest 4 are the base. Hence, we want to load the base; we will load a dword into eax, starting at ebp-6.
+															; This excludes the limit bytes.
+3D 00 F4 03 80        cmp     eax, 8003F400h				; Compare the IDTR base with 0x8003F400. 0x8003F400 is usually the virtual address of IDT base on Windows XP.
+76 10                 jbe     short loc_10001C88			; J (jump) B (below) E (equal); therefore, if eax <= 0x8003F400. cmp affects conditions in EFLAGS register, that's how Jcc knows to navigate based on conditions.
+3D 00 74 04 80        cmp     eax, 80047400h				; Same as line 11, with a different value.
+73 09                 jnb     short loc_10001C88			; J (jump) N (not) B (beneath); Jump to loc_10001C88 if eax >= 0x80047400.
+33 C0                 xor     eax, eax						; null out eax
+5F                    pop     edi							; pop edi back into itself
+8B E5                 mov     esp, ebp						; move ebp into esp, clearing our the stack
+5D                    pop     ebp							; pop old ebp into itself
+C2 0C 00              retn    0Ch							; return 0
+
+
+; By now, we can roughly construct this part of the code segment. There is no function standard function to access the contents of the IDTR in C, so we'll improvise with inline assembly.
+; We should put a notice on the cmp instructions above: the conditions they are being supported with only use unsigned arguments.
+; We will use GCC. The following attempt to reconstruct the code works on 32-bit x86 systems
+
+/*
+#include <stdint.h>
+
+typedef struct
+{
+	uint16_t limit;
+	uint32_t base;
+} __attribute__((packed)) IDT_PTR;
+
+int _DllMain(...)
+{
+	IDT_PTR idtr;
+	asm volatile
+	(
+		"sidt %0":
+		"=m" (idtr)
+	);
+	if(idtr.base <= 0x8003F400) goto loc_10001C88;
+	if(idtr.base >= 0x80047400) goto loc_10001C88;
+
+loc_10001C88:
+	...
+*/
                 loc_10001C88:
 33 C0                 xor     eax, eax
 B9 49 00 00 00        mov     ecx, 49h
