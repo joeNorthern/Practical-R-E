@@ -3,7 +3,7 @@
                 _DllMain@12 proc near
 55                    push    ebp                           ; push ebp from caller down the stack
 8B EC                 mov     ebp, esp						; move esp to ebp, new stack frame
-81 EC 30 01 00+       sub     esp, 130h						; subtract 0x130 from esp, new stack frame used
+81 EC 30 01 00+       sub     esp, 130h						; subtract 304 bytes from esp, new stack frame used
 57                    push    edi							; pushing edi down the stack, what is it?
 0F 01 4D F8           sidt    fword ptr [ebp-8]				; store IDTR at ebp-8, Store Interrupt Descriptor Table. Think of the IDT as an array of function pointers to fault/interrupt handlers.
 8B 45 FA              mov     eax, [ebp-6]					; The IDT Register consists of 6-bytes. High 2-bytes are the limit, the rest 4 are the base. Hence, we want to load the base; we will load a dword into eax, starting at ebp-6.
@@ -42,26 +42,39 @@ C2 0C 00              retn    0Ch							; return 0
 ;	);
 ;	if(idtr.base <= 0x8003F400) goto loc_10001C88;
 ;	if(idtr.base >= 0x80047400) goto loc_10001C88;
+;	return 0;
 ;
 ; loc_10001C88:
 ; 	...
                 loc_10001C88:
-33 C0                 xor     eax, eax
-B9 49 00 00 00        mov     ecx, 49h
-8D BD D4 FE FF+       lea     edi, [ebp-12Ch]
-C7 85 D0 FE FF+       mov     dword ptr [ebp-130h], 0
-50                    push    eax
-6A 02                 push    2
-F3 AB                 rep stosd
-E8 2D 2F 00 00        call    CreateToolhelp32Snapshot
-8B F8                 mov     edi, eax
-83 FF FF              cmp     edi, 0FFFFFFFFh
-75 09                 jnz     short loc_10001CB9 (line 35)
-33 C0                 xor     eax, eax
-5F                    pop     edi
-8B E5                 mov     esp, ebp
-5D                    pop     ebp
-C2 0C 00              retn    0Ch
+33 C0                 xor     eax, eax						; null out eax
+B9 49 00 00 00        mov     ecx, 49h						; move 74 into ecx
+8D BD D4 FE FF+       lea     edi, [ebp-12Ch]				; load address at ebp-300 (?)
+C7 85 D0 FE FF+       mov     dword ptr [ebp-130h], 0		; null out 4 bytes starting at ebp-130 (?)
+50                    push    eax							; push eax
+6A 02                 push    2								; push 2
+F3 AB                 rep stosd								; write eax into address stored in edi ecx times and increment the edi pointer by size 4 bytes (stosD -> double)
+
+; Let's take a deeper look. EAX is being set as zero, whilst we move 74 into ecx. Then we load address ebp-300, which seems to be a buffer to a type of 4 bytes.
+; 74*4 = 296, therefore we null out 296 bytes down the stack starting at ebp-300.
+; As of default on 32-bit systems, 4 bytes is the biggest size, so this is probably size_t. We can't know yet if it's signed or unsigned.
+
+E8 2D 2F 00 00        call    CreateToolhelp32Snapshot		; deserves a separate section
+8B F8                 mov     edi, eax						; move what CreateToolhelp32Snapshot returns into edi
+83 FF FF              cmp     edi, 0FFFFFFFFh				; compare with -1; see if CreateToolhelp32Snapshot returns a valid table entry
+75 09                 jnz     short loc_10001CB9			; J (jump) N (not) Z (zero); jump to loc_10001CB9 if Z flag in EFLAGS isn't on (which will not be on if the cmp above won't be equal)
+33 C0                 xor     eax, eax						; proceed to exit if what CreateToolhelp32Snapshot returned is invalid
+5F                    pop     edi							; same as above
+8B E5                 mov     esp, ebp						; ...
+5D                    pop     ebp							; ...
+C2 0C 00              retn    0Ch							; ...
+
+; HANDLE CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID);
+; We can see that we have pushed some values previously on the stack, and as we may know x86 accepts function arguments through it. 
+; Roughly the call looks like CreateToolHelp32Snapshot(TH32CS_SNAPPROCESS, 0), which returns a void* with an index to a handle entry within the handle table structure within the kernel-space.
+; This "index" is not an address but a literal number for us to use when trying to communicate with our handle entry in the kernel-space; it is an index.
+; It is possible to reference it to file descriptors on linux, except that the usage is different; no I/O is taking place (I suppose?).
+;
                 loc_10001CB9:
 8D 85 D0 FE FF+       lea     eax, [ebp-130h]
 56                    push    esi
