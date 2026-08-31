@@ -21,7 +21,7 @@ C2 0C 00              retn    0Ch							; return 0
 
 ; By now, we can roughly construct this part of the code segment. There is no function standard function to access the contents of the IDTR in C, so we'll improvise with inline assembly.
 ; We should put a notice on the cmp instructions above: the conditions they are being supported with only use unsigned arguments.
-; We will use GCC. The following attempt to reconstruct the code works on 32-bit x86 systems
+; The following attempt to reconstruct the code works on 32-bit x86 systems
 
 
 ; #include <stdint.h>
@@ -74,17 +74,28 @@ C2 0C 00              retn    0Ch							; ...
 ; Roughly the call looks like CreateToolHelp32Snapshot(TH32CS_SNAPPROCESS, 0), which returns a void* with an index to a handle entry within the handle table structure within the kernel-space.
 ; This "index" is not an address but a literal number for us to use when trying to communicate with our handle entry in the kernel-space; it is an index.
 ; It is possible to reference it to file descriptors on linux, except that the usage is different; no I/O is taking place (I suppose?).
-;
+
                 loc_10001CB9:
-8D 85 D0 FE FF+       lea     eax, [ebp-130h]
-56                    push    esi
-50                    push    eax
-57                    push    edi
-C7 85 D0 FE FF+       mov     dword ptr [ebp-130h], 128h
-E8 FF 2E 00 00        call    Process32First
-85 C0                 test    eax, eax
-74 4F                 jz      short loc_10001D24 (line 70)
-8B 35 C0 50 00+       mov     esi, ds:_stricmp
+8D 85 D0 FE FF+       lea     eax, [ebp-130h]				; caluclate start of the stack frame (determine start of LPPROCESSENTRY32 struct)
+56                    push    esi							; CreateToolhelp32Snapshot changes something in esi? I don't see that anything changed esi previously
+50                    push    eax							; push starting address of the stack frame (LPPROCESSENTRY32)
+57                    push    edi							; push what CreateToolhelp32Snapshot returned in loc_10001C88.
+C7 85 D0 FE FF+       mov     dword ptr [ebp-130h], 128h	; move 0x128 to start of the stack frame (LPPROCESSENTRY32 e; e.dwSize = sizeof(e);)
+E8 FF 2E 00 00        call    Process32First				; retrieve information from given system snapshot and fill given LPPROCESSENTRY32 struct with data.
+
+; BOOL Process32First
+; (
+;  HANDLE hSnapshot,
+;  LPPROCESSENTRY32 lppe
+; );
+;
+; Can be seen that we are first passing what CreateToolhelp32Snapshot returned previously, but next we are passing EAX.
+; But turns out EAX is a pointer to a LPPROCESSENTRY32 structure! Now instruction 83 makes total sense!
+; Before using an LPPROCESSENTRY32 structure, it is mandatory to set it's dwSize member to sizeof(LPPROCESSENTRY32), which is done in line 83.
+
+85 C0                 test    eax, eax						; AND eax with eax and set appropriate falgs in EFLAGS 
+74 4F                 jz      short loc_10001D24			; J (jump) Z (zero); jump to loc_10001D24 if Z flag in EFLAGS is on, which only triggers when Process32First returns FALSE (0).
+8B 35 C0 50 00+       mov     esi, ds:_stricmp				;
 8D 8D F4 FE FF+       lea     ecx, [ebp-10Ch]
 68 50 7C 00 10        push    10007C50h
 51                    push    ecx
@@ -140,3 +151,32 @@ B8 01 00 00 00        mov     eax, 1
 5D                    pop     ebp
 C2 0C 00              retn    0Ch
                 _DllMain@12 endp
+
+; #include <stdint.h>
+;
+; typedef struct
+; {
+;	uint16_t limit;
+;	uint32_t base;
+; } __attribute__((packed)) IDT_PTR; /* _attribute__((packed)) means to struct this structure without paddling whatsoever */
+;
+; int _DllMain(...)
+; {
+; 	IDT_PTR idtr;
+;	asm volatile
+;	(
+;		"sidt %0":
+;		"=m" (idtr)
+;	);
+;	if(idtr.base <= 0x8003F400) goto loc_10001C88;
+;	if(idtr.base >= 0x80047400) goto loc_10001C88;
+;	return 0;
+;
+; loc_10001C88:
+;	HANDLE current_process_handle;
+;	if((current_process_handle = CreateToolhelp32Snapshot(TH32CS_SNAPPROCCESS, 0)) != INVALID_HANDLE_VALUE)
+;		goto loc_10001CB9; 
+;	return 0;
+;
+; loc_10001CB9:
+;	
