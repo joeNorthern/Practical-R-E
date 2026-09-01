@@ -40,6 +40,7 @@ C2 0C 00              retn    0Ch							; return 0
 ;		"sidt %0":
 ;		"=m" (idtr)
 ;	);
+;
 ;	if(idtr.base <= 0x8003F400) goto loc_10001C88;
 ;	if(idtr.base >= 0x80047400) goto loc_10001C88;
 ;	return 0;
@@ -73,7 +74,7 @@ C2 0C 00              retn    0Ch							; ...
 ; We can see that we have pushed some values previously on the stack, and as we may know x86 accepts function arguments through it. 
 ; Roughly the call looks like CreateToolHelp32Snapshot(TH32CS_SNAPPROCESS, 0), which returns a void* with an index to a handle entry within the handle table structure within the kernel-space.
 ; This "index" is not an address but a literal number for us to use when trying to communicate with our handle entry in the kernel-space; it is an index.
-; It is possible to reference it to file descriptors on linux, except that the usage is different; no I/O is taking place (I suppose?).
+; It is possible to reference it to file descriptors on linux, except that there is no direct "socket" (I suppose?).
 
                 loc_10001CB9:
 8D 85 D0 FE FF+       lea     eax, [ebp-130h]				; caluclate start of the stack frame (determine start of LPPROCESSENTRY32 struct)
@@ -83,10 +84,9 @@ C2 0C 00              retn    0Ch							; ...
 C7 85 D0 FE FF+       mov     dword ptr [ebp-130h], 128h	; move 0x128 to start of the stack frame (LPPROCESSENTRY32 e; e.dwSize = sizeof(e);)
 E8 FF 2E 00 00        call    Process32First				; retrieve information from given system snapshot and fill given LPPROCESSENTRY32 struct with data.
 
-; BOOL Process32First
-; (
-;  HANDLE hSnapshot,
-;  LPPROCESSENTRY32 lppe
+; BOOL Process32First (
+; 	HANDLE hSnapshot,
+; 	LPPROCESSENTRY32 lppe
 ; );
 ;
 ; Can be seen that we are first passing what CreateToolhelp32Snapshot returned previously, but next we are passing EAX.
@@ -95,39 +95,60 @@ E8 FF 2E 00 00        call    Process32First				; retrieve information from give
 
 85 C0                 test    eax, eax						; AND eax with eax and set appropriate falgs in EFLAGS 
 74 4F                 jz      short loc_10001D24			; J (jump) Z (zero); jump to loc_10001D24 if Z flag in EFLAGS is on, which only triggers when Process32First returns FALSE (0).
-8B 35 C0 50 00+       mov     esi, ds:_stricmp				;
-8D 8D F4 FE FF+       lea     ecx, [ebp-10Ch]
-68 50 7C 00 10        push    10007C50h
-51                    push    ecx
-FF D6                 call    esi ; _stricmp
-83 C4 08              add     esp, 8
-85 C0                 test    eax, eax
-74 26                 jz      short loc_10001D16 (line 66)
+8B 35 C0 50 00+       mov     esi, ds:_stricmp				; load address of _stricmp macro to esi. ds: is noise here
+8D 8D F4 FE FF+       lea     ecx, [ebp-10Ch]				; load address of ebp-268. this should be a statement like *(void*)ecx = &e.some_struct_member;
+
+68 50 7C 00 10        push    10007C50h						; what is this value?
+51                    push    ecx							; push address of ebp-268
+FF D6                 call    esi ; _stricmp				; call stricmp
+83 C4 08              add     esp, 8						; esp += 8
+85 C0                 test    eax, eax						; eax & eax; if both are zero, Z in EFLAGS flag is on
+74 26                 jz      short loc_10001D16			; jump if stricmp returned 0 in eax
+
+; Let's untangle the LPPROCESSENTRY32 structure to understand what ebp-268 refers to:
+; typedef struct tagPROCESSENTRY32 {
+; 	DWORD     dwSize;                  	; 4 bytes
+;  	DWORD     cntUsage;					; 4 bytes
+;  	DWORD     th32ProcessID;			; 4 bytes
+;  	ULONG_PTR th32DefaultHeapID;		; 4 bytes
+;  	DWORD     th32ModuleID;				; 4 bytes
+;  	DWORD     cntThreads;				; 4 bytes
+;  	DWORD     th32ParentProcessID;		; 4 bytes
+;  	LONG      pcPriClassBase;			; 4 bytes
+;  	DWORD     dwFlags;					; 4 byte
+;  	CHAR      szExeFile[MAX_PATH];		; 260 bytes (mindwindef.h) = 296 bytes
+; } PROCESSENTRY32;
+;
+; ebp-304 - ebp- 268 = *(void*) struct_base += 36. It will equal to the 9th member of the struct, which is szExeFile.
+; We effectively call stricmp(struct_base.szExeFile, 0x10007C60).
+; The string was supposed to be filled with data by Process32First, and so if the data filled was the same as 0x10007C60, we would jump to loc_10001D16.
+; I see there is no fallback here, so I suppose if it won't be equal it will continue execution as usual.
+
                 loc_10001CF0:
 8D 95 D0 FE FF+       lea     edx, [ebp-130h]
 52                    push    edx
 57                    push    edi
 E8 CD 2E 00 00        call    Process32Next
 85 C0                 test    eax, eax
-74 23                 jz      short loc_10001D24 (line 70)
+74 23                 jz      short loc_10001D24
 8D 85 F4 FE FF+       lea     eax, [ebp-10Ch]
 68 50 7C 00 10        push    10007C50h
 50                    push    eax
 FF D6                 call    esi ; _stricmp
 83 C4 08              add     esp, 8
 85 C0                 test    eax, eax
-75 DA                 jnz     short loc_10001CF0 (line 52)
+75 DA                 jnz     short loc_10001CF0
                 loc_10001D16:
 8B 85 E8 FE FF+       mov     eax, [ebp-118h]
 8B 8D D8 FE FF+       mov     ecx, [ebp-128h]
-EB 06                 jmp     short loc_10001D2A (line 73)
+EB 06                 jmp     short loc_10001D2A
                 loc_10001D24:
 8B 45 0C              mov     eax, [ebp+0Ch]
 8B 4D 0C              mov     ecx, [ebp+0Ch]
                 loc_10001D2A:
 3B C1                 cmp     eax, ecx
 5E                    pop     esi
-75 09                 jnz     short loc_10001D38 (line 82)
+75 09                 jnz     short loc_10001D38
 33 C0                 xor     eax, eax
 5F                    pop     edi
 8B E5                 mov     esp, ebp
@@ -136,7 +157,7 @@ C2 0C 00              retn    0Ch
                 loc_10001D38:
 8B 45 0C              mov     eax, [ebp+0Ch]
 48                    dec     eax
-75 15                 jnz     short loc_10001D53 (line 93)
+75 15                 jnz     short loc_10001D53
 6A 00                 push    0
 6A 00                 push    0
 6A 00                 push    0
@@ -179,4 +200,9 @@ C2 0C 00              retn    0Ch
 ;	return 0;
 ;
 ; loc_10001CB9:
-;	
+;	LPPROCESSENTRY32 lppe;
+;	Process32First(current_process_handle, lppe);
+; 	if(!stricmp(lppe.szExeFile, 0x10007C60)) goto loc_10001D16;
+; 
+; loc_10001D16:
+;	TBW
