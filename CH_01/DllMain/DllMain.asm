@@ -95,7 +95,7 @@ E8 FF 2E 00 00        call    Process32First				; retrieve information from give
 
 85 C0                 test    eax, eax						; AND eax with eax and set appropriate falgs in EFLAGS 
 74 4F                 jz      short loc_10001D24			; J (jump) Z (zero); jump to loc_10001D24 if Z flag in EFLAGS is on, which only triggers when Process32First returns FALSE (0).
-8B 35 C0 50 00+       mov     esi, ds:_stricmp				; load address of _stricmp macro to esi. ds: is noise here
+8B 35 C0 50 00+       mov     esi, ds:_stricmp				; load address of _stricmp macro to esi. data segment is noise here
 8D 8D F4 FE FF+       lea     ecx, [ebp-10Ch]				; load address of ebp-268. this should be a statement like *(void*)ecx = &e.some_struct_member;
 
 68 50 7C 00 10        push    10007C50h						; what is this value?
@@ -119,13 +119,13 @@ FF D6                 call    esi ; _stricmp				; call stricmp
 ;  	CHAR      szExeFile[MAX_PATH];		; 260 bytes (mindwindef.h) = 296 bytes
 ; } PROCESSENTRY32;
 ;
-; ebp-304 - ebp- 268 = *(void*) struct_base += 36. It will equal to the 9th member of the struct, which is szExeFile.
-; We effectively call stricmp(struct_base.szExeFile, 0x10007C60).
+; ebp-296 - ebp-268 = *(PROCESSENTRY32 *)(char *)struct_base += 28. Seems to be struct_base->pcPriClassBase.
+; We effectively call stricmp(struct_base.pcPriClassBase, 0x10007C60).
 ; The string was supposed to be filled with data by Process32First, and so if the data filled was the same as 0x10007C60, we would jump to loc_10001D16.
 ; I see there is no fallback here, so I suppose if it won't be equal it will continue execution as usual.
 
                 loc_10001CF0:
-8D 95 D0 FE FF+       lea     edx, [ebp-130h]
+8D 95 D0 FE FF+       lea     edx, [ebp-130h] 
 52                    push    edx
 57                    push    edi
 E8 CD 2E 00 00        call    Process32Next
@@ -140,14 +140,19 @@ FF D6                 call    esi ; _stricmp
 75 DA                 jnz     short loc_10001CF0
                 loc_10001D16:
 8B 85 E8 FE FF+       mov     eax, [ebp-118h]
+; ebp-296 - ebp-280 = *(PROCESSENTRY32 *)(char *)struct_base += 16. struct_base->th32ModuleID.
 8B 8D D8 FE FF+       mov     ecx, [ebp-128h]
+; ebp-296 - ebp-296 = *(PROCESSENTRY32 *)(char *)struct_base += 0. struct_base->dwSize.
+; EAX = struct_base.th32ModuleID;
+; ECX = struct_base.dwSize;
 EB 06                 jmp     short loc_10001D2A
                 loc_10001D24:
 8B 45 0C              mov     eax, [ebp+0Ch]
 8B 4D 0C              mov     ecx, [ebp+0Ch]
                 loc_10001D2A:
-3B C1                 cmp     eax, ecx
-5E                    pop     esi
+3B C1                 cmp     eax, ecx				; we jump here after loc_10001D16. compare struct_base.th32ParentProcessID and struct_base.th32ProcessID.
+5E                    pop     esi					; the last manipulation with the stack was either in line 136, if we didn't get a fallback at loc_10001CB9, or inside loc_10001CB9 at line 102.
+													; good for us, both these scenarios result in address of struct_base->pcPriClassBase to be pushed to esi.
 75 09                 jnz     short loc_10001D38
 33 C0                 xor     eax, eax
 5F                    pop     edi
@@ -205,4 +210,8 @@ C2 0C 00              retn    0Ch
 ; 	if(!stricmp(lppe.szExeFile, 0x10007C60)) goto loc_10001D16;
 ; 
 ; loc_10001D16:
-;	TBW
+;	DWORD eax = lppe.th32ModuleID;
+;	DWORD eax = lppe.dwSize;
+;	goto loc_10001D2A;
+;
+; 1loc_10001D2A;
