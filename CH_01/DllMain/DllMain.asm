@@ -3,7 +3,7 @@
 _DllMain@12 proc near
     push    ebp
     mov     ebp, esp
-    sub     esp, 130h
+    sub     esp, 130h /* esp-304 */
     push    edi
     sidt    fword ptr [ebp-8]
     mov     eax, [ebp-6]
@@ -19,11 +19,17 @@ _DllMain@12 proc near
 loc_10001C88:
     xor     eax, eax
     mov     ecx, 49h
-    lea     edi, [ebp-12Ch]
+    lea     edi, [ebp-12Ch] /* ebp-300 */
     mov     dword ptr [ebp-130h], 0
     push    eax
     push    2
     rep     stosd
+	/*
+		rep is a prefix and does the instruction that follows it ecx times.
+		stosd writes DWORD eax at edi, each time increment edi to point DWORD upward.
+		here we are writing 73*4 = 292 bytes; it excludes the previously saved IDT right
+		on top of the stack frame.
+	*/
     call    CreateToolhelp32Snapshot
     mov     edi, eax
     cmp     edi, 0FFFFFFFFh
