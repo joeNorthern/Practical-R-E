@@ -58,6 +58,15 @@ BOOL DllMain(HINSTANCE hinstDll, uint32_t fdwReason, LPVOID lpvReserved)
 				if(eax != ecx)
 				{
 					/* loc_10001D38 */
+					uint32_t eax = fdwReason-1;
+					if(eax)
+					{
+						/* loc_10001D53 */
+						return 12;
+					} else
+					{
+						return CreateThread(NULL, NULL, NULL, 0x100032D0, NULL, NULL);
+					}
 						
 				}
 				return 12;
@@ -73,6 +82,15 @@ BOOL DllMain(HINSTANCE hinstDll, uint32_t fdwReason, LPVOID lpvReserved)
 					if(eax != ecx)
 					{
 						/* loc_10001D38 */
+						uint32_t eax = fdwReason-1;
+						if(eax)
+						{
+							/* loc_10001D53 */
+							return 12;
+						} else
+						{
+							return CreateThread(NULL, NULL, NULL, 0x100032D0, NULL, NULL);
+						}
 						
 					} else { return 12; }
 					if(stricmp("explorer.exe", ecx) == 0)
