@@ -110,6 +110,11 @@ int main(int argc, char **argv)
 }
 
 /*
-code is being written as if we are on a 32-bit machine.
-i should get an emulator for this later
+I admit, this is my first revering experience.
+It is fun, and very rewarding at the end.
+
+This recreation of the assembly without the help of the book is indeed atrocious and I should find other ways
+to deal with labels.
+
+I hardcoded them to remember where I am, maybe soon I will rewrite them to normal labels.
 */
