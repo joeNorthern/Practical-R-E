@@ -1,0 +1,3 @@
+at first the program loads a struct of 304 bytes
+and then proceeds to write the IDT register at ebp-8.
+ebp-8 is inside this 304 byte region. maybe it's a struct?
